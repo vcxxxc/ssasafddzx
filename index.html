@@ -26,7 +26,7 @@
             border: 2px solid var(--tg-theme-button-color, #3390ec);
             border-radius: 10px;
             cursor: crosshair;
-            touch-action: none; /* Важно для рисования пальцем */
+            touch-action: none;
         }
 
         .controls {
@@ -59,6 +59,35 @@
             color: var(--tg-theme-button-text-color, #fff);
             flex-grow: 1;
         }
+
+        /* Модальное окно для инструкции / ручного ввода ID */
+        #overlay {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.6);
+            z-index: 999;
+        }
+        #overlay .box {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 420px;
+            width: 90%;
+            color: #000;
+        }
+        #overlay input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        #overlay button { width: 100%; }
+        #instr { font-size: 14px; color: #333; }
     </style>
 </head>
 <body>
@@ -71,115 +100,151 @@
         <button id="sendBtn">Отправить</button>
     </div>
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand(); // Раскрываем на весь экран
+    <div id="overlay">
+        <div class="box">
+            <div id="instr">
+                Не удалось определить ID пользователя. Это значит, что вы открыли страницу не как Telegram Web App.
+                Откройте эту страницу через Telegram Web App (через кнопку Web App у вашего бота), либо
+                вставьте сюда свой Telegram user ID для тестовой отправки.
+                <br><br>
+                Как получить ID: откройте @userinfobot или @get_id_bot в Telegram — он вернёт ваш числовой ID.
+            </div>
 
-        // Настройки канваса
+            <input id="manualId" placeholder="Вставьте Telegram user ID для теста (напр. 123456789)" />
+            <button id="useIdBtn">Использовать этот ID для теста</button>
+            <button id="openInstrBtn" style="margin-top:8px;background:#eee;color:#000;">Закрыть</button>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram?.WebApp || {};
+        try { if (tg.expand) tg.expand(); } catch(e){ /* ignore if not in telegram */ }
+
+        // Канвас
         const canvas = document.getElementById('drawingCanvas');
         const ctx = canvas.getContext('2d');
         let painting = false;
 
-        // Подстраиваем размер под экран
         function resizeCanvas() {
             canvas.width = window.innerWidth * 0.9;
             canvas.height = window.innerHeight * 0.7;
         }
         resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
-        // Функции рисования
         function startPosition(e) {
             painting = true;
             draw(e);
         }
-
         function finishedPosition() {
             painting = false;
             ctx.beginPath();
         }
-
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
-            // Проверка: это мышь или тач?
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
-            };
+            return { x: clientX - rect.left, y: clientY - rect.top };
         }
-
         function draw(e) {
             if (!painting) return;
-            e.preventDefault(); // Чтобы экран не скроллился при рисовании
-
+            e.preventDefault();
             ctx.lineWidth = 5;
             ctx.lineCap = 'round';
-            ctx.strokeStyle = '#000000'; // Черный цвет
-
+            ctx.strokeStyle = '#000';
             const pos = getPos(e);
-
             ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(pos.x, pos.y);
         }
 
-        // События мыши
         canvas.addEventListener('mousedown', startPosition);
         canvas.addEventListener('mouseup', finishedPosition);
         canvas.addEventListener('mousemove', draw);
-
-        // События тача (для телефонов)
         canvas.addEventListener('touchstart', startPosition);
         canvas.addEventListener('touchend', finishedPosition);
         canvas.addEventListener('touchmove', draw);
 
-        // Кнопка очистки
         document.getElementById('clearBtn').addEventListener('click', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         });
 
-        // Кнопка отправки
+        // --- Обработчик отправки ---
+        async function getUserIdOrPrompt() {
+            // Пытаемся взять id из Telegram WebApp initDataUnsafe
+            const tgUserId = tg?.initDataUnsafe?.user?.id || tg?.initData?.user?.id;
+            if (tgUserId) return tgUserId;
+
+            // Если нет — смотрим в сохранённом тестовом id
+            const saved = localStorage.getItem('TEST_TG_USER_ID');
+            if (saved) return saved;
+
+            // иначе показываем оверлей с объяснением и полем для ввода
+            document.getElementById('overlay').style.display = 'flex';
+            return null;
+        }
+
+        document.getElementById('useIdBtn').addEventListener('click', () => {
+            const v = document.getElementById('manualId').value.trim();
+            if (!v) { alert('Введите id'); return; }
+            localStorage.setItem('TEST_TG_USER_ID', v);
+            document.getElementById('overlay').style.display = 'none';
+            alert('Тестовый ID сохранён. Попробуйте снова нажать "Отправить".');
+        });
+        document.getElementById('openInstrBtn').addEventListener('click', () => {
+            document.getElementById('overlay').style.display = 'none';
+        });
+
         document.getElementById('sendBtn').addEventListener('click', async () => {
-            const userId = tg.initDataUnsafe?.user?.id;
-            
-            // ВАЖНО: В реальном приложении токен нельзя хранить на клиенте (в HTML).
-            // Запросы должны идти на ваш бэкенд, а бэкенд уже шлет в Telegram.
-            // Но для учебного примера вставим токен сюда.
-            const BOT_TOKEN = '8301307015:AAGzrJPUmFFJEO-ZVpqtj6bbn9zbNyWmP0M'; 
+            let userId = await getUserIdOrPrompt();
+            if (!userId) return; // overlay открыт, ждём ввода
 
-            if (!userId) {
-                alert("Не удалось определить ID пользователя. Откройте в Telegram.");
-                return;
-            }
-
-            // Превращаем канвас в Blob (файл)
+            // Превращаем канвас в Blob
             canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    alert('Пустой рисунок');
+                    return;
+                }
+
+                // ВАЖНО: НЕ храните BOT_TOKEN в клиентском коде.
+                // Настройте бэкенд-эндпоинт /api/sendPhoto, который принимает multipart/form-data
+                // с полями chat_id и photo, и уже с сервера шлёт запрос в Telegram Bot API,
+                // где токен хранится в переменных окружения.
                 const formData = new FormData();
                 formData.append('chat_id', userId);
                 formData.append('photo', blob, 'drawing.png');
 
                 try {
-                    // Используем fetch для отправки прямо в API Telegram
-                    document.getElementById('sendBtn').innerText = 'Отправка...';
-                    
-                    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                    const sendBtn = document.getElementById('sendBtn');
+                    const prevText = sendBtn.innerText;
+                    sendBtn.innerText = 'Отправка...';
+                    sendBtn.disabled = true;
+
+                    // Запрос на ваш бэкенд (его нужно реализовать!)
+                    const resp = await fetch('/api/sendPhoto', {
                         method: 'POST',
                         body: formData
                     });
 
-                    const data = await response.json();
-
-                    if (data.ok) {
-                        tg.close(); // Закрываем приложение после успеха
-                    } else {
-                        alert('Ошибка отправки: ' + data.description);
+                    if (!resp.ok) {
+                        const txt = await resp.text();
+                        alert('Ошибка сервера: ' + (txt || resp.status));
+                        return;
                     }
-                } catch (error) {
-                    alert('Ошибка сети: ' + error.message);
+                    const data = await resp.json();
+                    if (data.ok) {
+                        // если WebApp — можно закрыть, иначе показать успех
+                        try { if (tg && tg.close) tg.close(); } catch(e){}
+                        alert('Отправлено успешно');
+                    } else {
+                        alert('Ошибка отправки: ' + (data.description || JSON.stringify(data)));
+                    }
+                } catch (err) {
+                    alert('Ошибка сети: ' + err.message);
                 } finally {
                     document.getElementById('sendBtn').innerText = 'Отправить';
+                    document.getElementById('sendBtn').disabled = false;
                 }
             });
         });
