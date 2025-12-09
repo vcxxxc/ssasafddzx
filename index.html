@@ -38,13 +38,15 @@
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); 
 
-        // --- НАЧАЛО БЛОКА ДЛЯ ОТЛАДКИ ---
-        // Этот alert покажет все данные, которые Telegram передал приложению.
-        // Если initDataUnsafe будет пустым, значит проблема в запуске.
-        alert('Запускаем отладку...\n\nДанные от Telegram:\n' + JSON.stringify(tg, null, 2));
-        // --- КОНЕЦ БЛОКА ДЛЯ ОТЛАДКИ ---
+        // --- НАЧАЛО БЛОКА ДЛЯ ДИАГНОСТИКИ ---
+        // Этот alert покажет, что объект Telegram WebApp в принципе загрузился
+        alert('WebApp-объект загружен. Готовимся показать данные...');
+        // Этот alert покажет содержимое данных о пользователе. Если тут будет "undefined" или "{}", значит Telegram их не передал.
+        alert('initDataUnsafe: ' + JSON.stringify(tg.initDataUnsafe));
+        // --- КОНЕЦ БЛОКА ДЛЯ ДИАГНОСТИКИ ---
+
+        tg.expand(); // Раскрываем на весь экран
 
         // Настройки канваса
         const canvas = document.getElementById('drawingCanvas');
