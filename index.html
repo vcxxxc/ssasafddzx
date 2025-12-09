@@ -1,178 +1,119 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Рисовалка для Telegram</title>
-    <!-- Подключаем скрипт Telegram WebApp -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Drawing App</title>
     <style>
         body {
-            margin: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
-            background-color: var(--tg-theme-bg-color, #f0f0f0);
-            color: var(--tg-theme-text-color, #000);
-            height: 100vh;
-            overflow: hidden;
-            font-family: sans-serif;
-        }
-
-        h1 { margin: 10px 0; font-size: 18px; }
-
-        canvas {
-            background: #fff;
-            border: 2px solid var(--tg-theme-button-color, #3390ec);
-            border-radius: 10px;
-            cursor: crosshair;
-            touch-action: none; /* Важно для рисования пальцем */
-        }
-
-        .controls {
-            margin-top: 15px;
-            display: flex;
-            gap: 10px;
-            width: 90%;
             justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
         }
-
+        canvas {
+            border: 1px solid #000;
+            background-color: #fff;
+        }
+        .buttons {
+            margin-top: 10px;
+        }
         button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 8px;
+            margin: 0 5px;
+            padding: 10px 20px;
             font-size: 16px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: opacity 0.2s;
-        }
-
-        button:active { opacity: 0.7; }
-
-        #clearBtn {
-            background-color: var(--tg-theme-secondary-bg-color, #e0e0e0);
-            color: var(--tg-theme-text-color, #000);
-        }
-
-        #sendBtn {
-            background-color: var(--tg-theme-button-color, #3390ec);
-            color: var(--tg-theme-button-text-color, #fff);
-            flex-grow: 1;
         }
     </style>
 </head>
 <body>
-
-    <h1>Нарисуй что-нибудь!</h1>
+    <h1>Draw and Send to Telegram</h1>
     <canvas id="drawingCanvas"></canvas>
-
-    <div class="controls">
-        <button id="clearBtn">Очистить</button>
-        <button id="sendBtn">Отправить</button>
+    <div class="buttons">
+        <button id="clearBtn">Clear</button>
+        <button id="sendBtn">Send</button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Раскрываем на весь экран
+        tg.expand(); 
+
+        // --- НАЧАЛО БЛОКА ДЛЯ ОТЛАДКИ ---
+        // Этот alert покажет все данные, которые Telegram передал приложению.
+        // Если initDataUnsafe будет пустым, значит проблема в запуске.
+        alert('Запускаем отладку...\n\nДанные от Telegram:\n' + JSON.stringify(tg, null, 2));
+        // --- КОНЕЦ БЛОКА ДЛЯ ОТЛАДКИ ---
 
         // Настройки канваса
         const canvas = document.getElementById('drawingCanvas');
         const ctx = canvas.getContext('2d');
         let painting = false;
 
-        // Подстраиваем размер под экран
         function resizeCanvas() {
             canvas.width = window.innerWidth * 0.9;
             canvas.height = window.innerHeight * 0.7;
         }
         resizeCanvas();
 
-        // Функции рисования
-        function startPosition(e) {
-            painting = true;
-            draw(e);
-        }
-
-        function finishedPosition() {
-            painting = false;
-            ctx.beginPath();
-        }
+        function startPosition(e) { painting = true; draw(e); }
+        function finishedPosition() { painting = false; ctx.beginPath(); }
 
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
-            // Проверка: это мышь или тач?
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
-            };
+            return { x: clientX - rect.left, y: clientY - rect.top };
         }
 
         function draw(e) {
             if (!painting) return;
-            e.preventDefault(); // Чтобы экран не скроллился при рисовании
-
+            e.preventDefault();
             ctx.lineWidth = 5;
             ctx.lineCap = 'round';
-            ctx.strokeStyle = '#000000'; // Черный цвет
-
+            ctx.strokeStyle = '#000000';
             const pos = getPos(e);
-
             ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(pos.x, pos.y);
         }
 
-        // События мыши
         canvas.addEventListener('mousedown', startPosition);
         canvas.addEventListener('mouseup', finishedPosition);
         canvas.addEventListener('mousemove', draw);
-
-        // События тача (для телефонов)
         canvas.addEventListener('touchstart', startPosition);
         canvas.addEventListener('touchend', finishedPosition);
         canvas.addEventListener('touchmove', draw);
 
-        // Кнопка очистки
         document.getElementById('clearBtn').addEventListener('click', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         });
 
-        // Кнопка отправки
-        document.getElementById('sendBtn').addEventListener('click', async () => {
-            const userId = tg.initDataUnsafe?.user?.id;
-            
-            // ВАЖНО: В реальном приложении токен нельзя хранить на клиенте (в HTML).
-            // Запросы должны идти на ваш бэкенд, а бэкенд уже шлет в Telegram.
-            // Но для учебного примера вставим токен сюда.
-            const BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА'; 
-
-            if (!userId) {
-                alert("Не удалось определить ID пользователя. Откройте в Telegram.");
+        document.getElementById('sendBtn').addEventListener('click', () => {
+            // Проверяем наличие данных еще раз
+            if (!tg.initDataUnsafe || !tg.initDataUnsafe.user || !tg.initDataUnsafe.user.id) {
+                alert('Ошибка: объект user или его id не найдены в данных от Telegram.');
                 return;
             }
 
-            // Превращаем канвас в Blob (файл)
+            const userId = tg.initDataUnsafe.user.id;
+            const BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА'; 
+
             canvas.toBlob(async (blob) => {
                 const formData = new FormData();
                 formData.append('chat_id', userId);
                 formData.append('photo', blob, 'drawing.png');
-
+                document.getElementById('sendBtn').innerText = 'Отправка...';
                 try {
-                    // Используем fetch для отправки прямо в API Telegram
-                    document.getElementById('sendBtn').innerText = 'Отправка...';
-                    
                     const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
                         method: 'POST',
                         body: formData
                     });
-
                     const data = await response.json();
-
                     if (data.ok) {
-                        tg.close(); // Закрываем приложение после успеха
+                        tg.close();
                     } else {
                         alert('Ошибка отправки: ' + data.description);
                     }
